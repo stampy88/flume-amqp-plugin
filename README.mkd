@@ -34,19 +34,19 @@ The AMQP Event Source will take message from an AMQP broker and create Flume eve
 The only required argument is the exchangeName parameter. Note that each parameter needs to be enclosed in quotes
 because the plugin uses named parameters for setting up the source.
 
-amqp("exchangeName=exchangeName",
-     "[,host=host] "
-     "[,port=port] "
-     "[,virtualHost=virtualHost] "
-     "[,userName=user] "
-     "[,password=password] "
-     "[,exchangeType=direct] "
-     "[,durableExchange=false] "
-     "[,queueName=queueName] "
-     "[,durableQueue=false] "
-     "[,exclusiveQueue=false] "
-     "[,autoDeleteQueue=false] "
-     "[,bindings=binding1,binding2,bindingN])"
+    amqp("exchangeName=exchangeName",
+         "[,host=host] "
+         "[,port=port] "
+         "[,virtualHost=virtualHost] "
+         "[,userName=user] "
+         "[,password=password] "
+         "[,exchangeType=direct] "
+         "[,durableExchange=false] "
+         "[,queueName=queueName] "
+         "[,durableQueue=false] "
+         "[,exclusiveQueue=false] "
+         "[,autoDeleteQueue=false] "
+         "[,bindings=binding1,binding2,bindingN])"
 
 exchangeName - this is the name of the AMQP exchange we are getting messages from.
 host - the host name or IP address of the broker. Default to localhost when not specified.
@@ -71,8 +71,8 @@ Examples
 
 1. Broker is on same node as flume agent, direct exchange type and two bindings
 
-amqp("exchangeName=alertMessages", "bindings=system, application")
+    amqp("exchangeName=alertMessages", "bindings=system, application")
 
 2. Broker is on different machine, direct exchange type, shared queue
 
-amqp("exchangeName=stockTrades", "host=10.23.224.2", "bindings=IBM,GOOG,MSFT")
+    amqp("exchangeName=stockTrades", "host=10.23.224.2", "bindings=IBM,GOOG,MSFT")
