@@ -13,6 +13,7 @@ Getting Started
 3. Build by running 'ant'. A flume-amqp-plugin.jar file should be created.
 
 4. Modify ${flume_dir}/conf/flume-site.xml
+
 {code:xml}
 <property>
     <name>flume.plugin.classes</name>
