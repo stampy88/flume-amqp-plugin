@@ -14,11 +14,11 @@ Getting Started
 
 4. Modify ${flume_dir}/conf/flume-site.xml
 
-	<property>
+    <property>
 	    <name>flume.plugin.classes</name>
-	    <value>amqp.AmqpEventSource</value>
-	    <description>Comma separated list of plugin classes</description>
-	</property>
+        <value>amqp.AmqpEventSource</value>
+        <description>Comma separated list of plugin classes</description>
+    </property>
 
 5. cd into the top-level flume directory (above plugins).
 
