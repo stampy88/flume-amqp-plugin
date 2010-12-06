@@ -48,22 +48,22 @@ because the plugin uses named parameters for setting up the source.
          "[,autoDeleteQueue=false] "
          "[,bindings=binding1,binding2,bindingN])"
 
-*exchangeName - this is the name of the AMQP exchange we are getting messages from.
-*host - the host name or IP address of the broker. Default to localhost when not specified.
-*port - the port on which the broker is accepting connections. Defaults to 5672 when not specified.
-*virtualHost - the virtual host to use when connecting to the broker. Default to "/" when not specified.
-*userName - the AMQP user name to use when connecting to the broker. Defaults to "guest" when not specified.
-*password - the password to use when connecting to the broker. Defaults to "guest" when not specified.
-*exchangeType -  the type exchange. Valid types are direct, fanout, topic, and header. Defaults to direct when not specified.
-*durableExchange - true if we are declaring a durable exchange (the exchange will survive a server restart). Defaults to false.
-*queueName - if left unspecified, the server chooses a name and provides this to the client. Generally, when applications
+* exchangeName - this is the name of the AMQP exchange we are getting messages from.
+* host - the host name or IP address of the broker. Default to localhost when not specified.
+* port - the port on which the broker is accepting connections. Defaults to 5672 when not specified.
+* virtualHost - the virtual host to use when connecting to the broker. Default to "/" when not specified.
+* userName - the AMQP user name to use when connecting to the broker. Defaults to "guest" when not specified.
+* password - the password to use when connecting to the broker. Defaults to "guest" when not specified.
+* exchangeType -  the type exchange. Valid types are direct, fanout, topic, and header. Defaults to direct when not specified.
+* durableExchange - true if we are declaring a durable exchange (the exchange will survive a server restart). Defaults to false.
+* queueName - if left unspecified, the server chooses a name and provides this to the client. Generally, when applications
 share a message queue they agree on a message queue name beforehand, and when an application needs a message queue
 for its own purposes, it lets the server provide a name.
-*durableQueue - if true, the message queue remains present and active when the server restarts. It may lose transient
+* durableQueue - if true, the message queue remains present and active when the server restarts. It may lose transient
 messages if the server restarts.
-*exclusiveQueue - if true, the queue belongs to the current connection only, and is deleted when the connection closes.
-*autoDeleteQueue - true if we are declaring an autodelete queue (server will delete it when no longer in use).
-*bindings - comma separated list of strings that will be used to bind the queue to the exchange. This is not required for
+* exclusiveQueue - if true, the queue belongs to the current connection only, and is deleted when the connection closes.
+* autoDeleteQueue - true if we are declaring an autodelete queue (server will delete it when no longer in use).
+* bindings - comma separated list of strings that will be used to bind the queue to the exchange. This is not required for
 certain exchange types.
 
 Examples
