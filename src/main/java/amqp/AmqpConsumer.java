@@ -82,7 +82,7 @@ class AmqpConsumer extends AmqpClient implements Runnable {
    * true if we are declaring an autodelete queue (server will delete it when no longer in use)
    */
   private boolean autoDelete;
-  private final String [] bindings;
+  private final String[] bindings;
 
   private Channel channel;
 
@@ -90,7 +90,7 @@ class AmqpConsumer extends AmqpClient implements Runnable {
 
   public AmqpConsumer(String host, int port, String virutalHost, String userName, String password,
                       String exchangeName, String exchangeType, boolean durableExchange,
-                      String queueName, boolean durable, boolean exclusive, boolean autoDelete, String...bindings) {
+                      String queueName, boolean durable, boolean exclusive, boolean autoDelete, String... bindings) {
     super(host, port, virutalHost, userName, password);
 
     this.exchangeName = exchangeName;
@@ -103,7 +103,7 @@ class AmqpConsumer extends AmqpClient implements Runnable {
     this.bindings = bindings;
   }
 
-  public AmqpConsumer(ConnectionFactory connectionFactory, String exchangeName, String queueName, String...bindings) {
+  public AmqpConsumer(ConnectionFactory connectionFactory, String exchangeName, String queueName, String... bindings) {
     super(connectionFactory);
 
     this.exchangeName = exchangeName;
@@ -134,7 +134,7 @@ class AmqpConsumer extends AmqpClient implements Runnable {
    */
   private void runConsumeLoop() {
     QueueingConsumer consumer = null;
-
+    String queueName;
     Thread currentThread = Thread.currentThread();
 
     while (isRunning() && !currentThread.isInterrupted()) {
@@ -148,26 +148,9 @@ class AmqpConsumer extends AmqpClient implements Runnable {
             // someone set the running flag to false
             break;
           }
-          // setup exchange, queue and binding
-          channel.exchangeDeclare(exchangeName, exchangeType, durableExchange);
-          // named queue?
-          if (queueName == null) {
-            queueName = channel.queueDeclare().getQueue();
 
-          } else {
-            channel.queueDeclare(queueName, durable, exclusive, autoDelete, null);
-          }
-
-          if(bindings != null) {
-            // multiple bindings
-            for(String binding : bindings) {
-              channel.queueBind(queueName, exchangeName, binding);
-            }
-          } else {
-            // no binding given - this could be the case if it is a fanout exchange
-            channel.queueBind(queueName, exchangeName, "");
-          }
-
+          // make declarations for consumer
+          queueName = declarationsForChannel(channel);
 
           consumer = new QueueingConsumer(channel);
           boolean noAck = false;
@@ -175,8 +158,10 @@ class AmqpConsumer extends AmqpClient implements Runnable {
           LOG.info("Starting new consumer. Server generated {} as consumerTag", consumerTag);
         }
 
+        // this blocks until a message is ready
         QueueingConsumer.Delivery delivery = consumer.nextDelivery();
 
+        // create a new flume event based on the message body
         Event event = new EventImpl(delivery.getBody());
 
         // add to queue
@@ -199,5 +184,37 @@ class AmqpConsumer extends AmqpClient implements Runnable {
     }
 
     LOG.info("Exited runConsumeLoop with running={} and interrupt status={}", isRunning(), currentThread.isInterrupted());
+  }
+
+  /**
+   * This method declares the exchange, queue and bindings needed by this consumer.
+   * The method returns the queue name that will be consumed from by this class.
+   *
+   * @param channel channel used to issue AMQP commands
+   * @return queue that will have messages consumed from
+   * @throws IOException thrown if there is any communication exception
+   */
+  protected String declarationsForChannel(Channel channel) throws IOException {
+    // setup exchange, queue and binding
+    channel.exchangeDeclare(exchangeName, exchangeType, durableExchange);
+    // named queue?
+    if (queueName == null) {
+      queueName = channel.queueDeclare().getQueue();
+
+    } else {
+      channel.queueDeclare(queueName, durable, exclusive, autoDelete, null);
+    }
+
+    if (bindings != null) {
+      // multiple bindings
+      for (String binding : bindings) {
+        channel.queueBind(queueName, exchangeName, binding);
+      }
+    } else {
+      // no binding given - this could be the case if it is a fanout exchange
+      channel.queueBind(queueName, exchangeName, SERVER_GENERATED_QUEUE_NAME);
+    }
+
+    return queueName;
   }
 }

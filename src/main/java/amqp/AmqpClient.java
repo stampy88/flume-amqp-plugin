@@ -40,6 +40,29 @@ abstract class AmqpClient {
 
   private static final int CONNECTION_RETRY_TIME = 1000;
   private static final int MAX_RETRY_TIME = CONNECTION_RETRY_TIME * 60;
+  private static final int NO_MAXIMUM = Integer.MAX_VALUE;
+
+  /**
+   * Exchange types as defined by AMQP specification
+   */
+  public static final String DIRECT_EXCHANGE = "direct";
+  public static final String TOPIC_EXCHANGE = "topic";
+  public static final String FANOUT_EXCHANGE = "fanout";
+  public static final String HEADERS_EXCHANGE = "headers";
+
+  public static final String NO_ROUTING_KEY = "";
+  public static final String SERVER_GENERATED_QUEUE_NAME = "";
+
+  /**
+   * Per the AMQP specification - The server MUST implement the direct exchange type and MUST pre-declare
+   * within each virtual host at least two direct exchanges: one named amq.direct, and one with no public name
+   * that serves as the default exchange for Publish methods.
+   * <p/>
+   * The fanout exchange type, and a pre-declared exchange called amq.fanout, are mandatory.
+   */
+  public static final String SERVER_DEFAULT_EXCHANGE = "";
+  public static final String SERVER_DIRECT_EXCHANGE = "amq.direct";
+  public static final String SERVER_FANOUT_EXCHANGE = "amq.fanout";
 
   private final ConnectionFactory connectionFactory;
 
@@ -73,7 +96,7 @@ abstract class AmqpClient {
   }
 
   protected void setRunning(boolean running) {
-    if(this.running != running) {
+    if (this.running != running) {
 
       LOG.info("Setting running to {}", running);
       this.running = running;
@@ -102,6 +125,18 @@ abstract class AmqpClient {
    * @throws InterruptedException if any thread has interrupted the current thread.
    */
   protected Channel getChannel() throws InterruptedException {
+    return getChannel(NO_MAXIMUM);
+  }
+
+  /**
+   * This method will block until a connection and channel can be established to the AMQP broker as specified
+   * by the {@link #connectionFactory} or it has tried the maximum number of times.
+   *
+   * @param maximumRetryAttempts number of times to try a reconnect when we can't contact the broker.
+   * @return Channel to the broker or null if we have tried the maximum number of times to connect
+   * @throws InterruptedException if any thread has interrupted the current thread.
+   */
+  protected Channel getChannel(int maximumRetryAttempts) throws InterruptedException {
     Channel channel = null;
     Thread thread = Thread.currentThread();
     int numberTimesConnectionLost = 0;
@@ -109,7 +144,7 @@ abstract class AmqpClient {
     while (channel == null && isRunning() && !thread.isInterrupted()) {
       Connection conn = null;
       try {
-        LOG.info("Connecting to broker at {}...",connectionFactory.getHost());
+        LOG.info("Connecting to broker at {}...", connectionFactory.getHost());
         conn = connectionFactory.newConnection();
         LOG.info("Connected to broker at {}", connectionFactory.getHost());
 
@@ -120,7 +155,11 @@ abstract class AmqpClient {
         LOG.info("IOException caught. Closing connection to broker and waiting to reconnect", e);
         closeConnectionSilently(conn);
 
+        // increment connection lost count
         numberTimesConnectionLost++;
+        if (numberTimesConnectionLost > maximumRetryAttempts) {
+          break;
+        }
         waitToRetryConnection(numberTimesConnectionLost);
       }
     }
