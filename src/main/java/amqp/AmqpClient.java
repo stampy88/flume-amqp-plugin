@@ -17,6 +17,7 @@
  */
 package amqp;
 
+import com.rabbitmq.client.AlreadyClosedException;
 import com.rabbitmq.client.Channel;
 import com.rabbitmq.client.Connection;
 import com.rabbitmq.client.ConnectionFactory;
@@ -194,6 +195,8 @@ abstract class AmqpClient {
         channel.close();
       } catch (IOException e) {
         LOG.warn("Problem closing down channel", e);
+      } catch (AlreadyClosedException e) {
+        LOG.debug("Channel was already closed");
       } catch (ShutdownSignalException e) {
         // we can ignore this since we are shutting down
         LOG.debug("Got a shutdown signal while closing channel", e);
@@ -208,6 +211,8 @@ abstract class AmqpClient {
         connection.close();
       } catch (IOException e) {
         LOG.warn("Problem closing down connection", e);
+      } catch (AlreadyClosedException e) {
+        LOG.debug("Connection was already closed");
       } catch (ShutdownSignalException e) {
         // we can ignore this since we are shutting down
         LOG.debug("Got a shutdown signal while closing connection", e);
