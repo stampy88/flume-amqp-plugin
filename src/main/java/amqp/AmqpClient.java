@@ -183,7 +183,7 @@ abstract class AmqpClient {
       wait(waitTime);
     }
   }
-
+        
   /**
    * Tries to close the channel ignoring any {@link java.io.IOException}s that may occur while doing so.
    *

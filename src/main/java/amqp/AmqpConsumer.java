@@ -28,18 +28,19 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 
 /**
- * Subclasses of {@link com.cloudera.flume.handlers.amqp.AmqpClient} that will bind to a queue and collect
+ * Subclasses of {@link AmqpClient} that will bind to a queue and collect
  * messages from said queue and create {@link Event}s from them. These events are made available via the
  * blocking method {@link #getNextEvent(long, java.util.concurrent.TimeUnit)} ()}.
  * <p/>
  * The cancellation/shutdown policy for the consumer is to either interrupt the thread, or set the
  * {@link #running} flag to false.
  *
- * @see com.cloudera.flume.handlers.amqp.AmqpClient
+ * @see AmqpClient
  */
 class AmqpConsumer extends AmqpClient implements Runnable {
 
@@ -88,6 +89,19 @@ class AmqpConsumer extends AmqpClient implements Runnable {
 
   private final BlockingQueue<Event> events = new LinkedBlockingQueue<Event>();
 
+  private Thread consumerThread;
+
+  private volatile CountDownLatch startSignal;
+
+  /**
+   * This exception will be populated in the case where there was an unexpected shutdown error. This can
+   * happen when trying to declare an exchange, queue, etc. that already exists but with different attributes, e.g.
+   * durable, exchange type.
+   * <p/>
+   * This will be thrown from {@link #getNextEvent(long, java.util.concurrent.TimeUnit)} if not null
+   */
+  private volatile ShutdownSignalException exception;
+
   public AmqpConsumer(String host, int port, String virutalHost, String userName, String password,
                       String exchangeName, String exchangeType, boolean durableExchange,
                       String queueName, boolean durable, boolean exclusive, boolean autoDelete, String... bindings) {
@@ -111,14 +125,94 @@ class AmqpConsumer extends AmqpClient implements Runnable {
     this.bindings = bindings;
   }
 
-  public Event getNextEvent(long timeout, TimeUnit unit) throws InterruptedException {
-    return events.poll(timeout, unit);
+  /**
+   * Returns the next event in the {@link #events} queue, or null if it timeouts out before an event arrives.
+   * Note that once the queue is empty, and an {@link #exception} has occured, this method will throw said
+   * exception.
+   *
+   * @param timeout how long to wait before giving up, in units of
+   *                <tt>unit</tt>
+   * @param unit    a <tt>TimeUnit</tt> determining how to interpret the
+   *                <tt>timeout</tt> parameter
+   * @return the head of this queue, or <tt>null</tt> if the
+   *         specified waiting time elapses before an element is available
+   * @throws InterruptedException if interrupted while waiting
+   * @throws com.rabbitmq.client.ShutdownSignalException
+   *                              if there was an unexpected shutdown of the consumer
+   */
+  public Event getNextEvent(long timeout, TimeUnit unit) throws InterruptedException, ShutdownSignalException {
+    Event e = events.poll(timeout, unit);
+
+    if (e == null && exception != null) {
+      throw exception;
+    }
+
+    return e;
+  }
+
+  /**
+   * Returns true if they are events in the {@link #events} queue or if the {@link #exception} is set. This is
+   * included in the check because we want the subsequent {@link #getNextEvent(long, java.util.concurrent.TimeUnit)}
+   * to throw the exception when the queue is emptied.
+   *
+   * @return true if there are pending events
+   */
+  public boolean hasPendingEvents() {
+    return events.size() > 0 || exception != null;
+  }
+
+  /**
+   * This method will start this consumer's {@link #consumerThread} which will start the consumption of
+   * messages. This method blocks until the {@link #startSignal} is set in the {@link #run()} method
+   * signaling that the thread has actually started.
+   *
+   * @throws IllegalStateException throw if the consumer is already running
+   */
+  void startConsumer() throws IllegalStateException {
+    if (isRunning()) {
+      throw new IllegalStateException("AmqpConsumer is already started");
+    }
+
+    // need a new start signal
+    startSignal = new CountDownLatch(1);
+
+    consumerThread = new Thread(this, "AmqpConsumer");
+    consumerThread.start();
+
+    try {
+      // wait until the thread has start
+      startSignal.await();
+    } catch (InterruptedException e) {
+      // someone interrupted us, take this as a shutdown signal
+    }
+  }
+
+  /**
+   * This method will stop this consumer's {@link #consumerThread} and block until it exits.
+   *
+   * @throws IllegalStateException throw if the consumer is not running
+   */
+  void stopConsumer() {
+    if (!isRunning()) {
+      throw new IllegalStateException("AmqpConsumer is not running");
+    }
+
+    setRunning(false);
+    consumerThread.interrupt();
+    try {
+      consumerThread.join();
+    } catch (InterruptedException e) {
+      // someone interrupted us, take this as a shutdown signal
+    }
+    consumerThread = null;
   }
 
   @Override
   public void run() {
     LOG.info("AMQP Consumer is starting...");
     setRunning(true);
+    // signal that we are running - this will unblock the startConsumer method
+    startSignal.countDown();
 
     try {
       runConsumeLoop();
@@ -134,7 +228,6 @@ class AmqpConsumer extends AmqpClient implements Runnable {
    */
   private void runConsumeLoop() {
     QueueingConsumer consumer = null;
-    String queueName;
     Thread currentThread = Thread.currentThread();
 
     while (isRunning() && !currentThread.isInterrupted()) {
@@ -150,7 +243,7 @@ class AmqpConsumer extends AmqpClient implements Runnable {
           }
 
           // make declarations for consumer
-          queueName = declarationsForChannel(channel);
+          String queueName = declarationsForChannel(channel);
 
           consumer = new QueueingConsumer(channel);
           boolean noAck = false;
@@ -173,17 +266,38 @@ class AmqpConsumer extends AmqpClient implements Runnable {
         setRunning(false);
 
       } catch (IOException e) {
-        LOG.info("IOException caught in Consumer Thread. Closing channel and waiting to reconnect", e);
-        closeChannelSilently(channel);
-        channel = null;
+        if (e.getCause() instanceof ShutdownSignalException) {
+          logShutdownSignalException((ShutdownSignalException) e.getCause());
+          setRunning(false);
+        } else {
+          LOG.info("IOException caught in Consumer Thread. Closing channel and waiting to reconnect", e);
+          closeChannelSilently(channel);
+          channel = null;
+        }
 
       } catch (ShutdownSignalException e) {
-        LOG.info("Consumer Thread caught ShutdownSignalException, shutting down...");
+        logShutdownSignalException(e);
         setRunning(false);
       }
     }
 
     LOG.info("Exited runConsumeLoop with running={} and interrupt status={}", isRunning(), currentThread.isInterrupted());
+  }
+
+  /**
+   * Will log the specified exception and will set the {@link #exception} field if the
+   * {@link com.rabbitmq.client.ShutdownSignalException#isInitiatedByApplication()} is false meaning
+   * that the shutdown wasn't client initiated.
+   *
+   * @param e exception
+   */
+  private void logShutdownSignalException(ShutdownSignalException e) {
+    if (e.isInitiatedByApplication()) {
+      LOG.info("Consumer Thread caught ShutdownSignalException, shutting down...");
+    } else {
+      LOG.error("Unexpected ShutdownSignalException caught in Consumer Thread , shutting down...", e);
+      this.exception = e;
+    }
   }
 
   /**

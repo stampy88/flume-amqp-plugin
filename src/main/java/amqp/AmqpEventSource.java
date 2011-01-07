@@ -33,44 +33,43 @@ import java.util.concurrent.TimeUnit;
  * This class is used to consume message from an AMQP broker and create {@link Event}s from the raw
  * body of the message. Uses RabbitMQ's AQMP client to connect to said broker.
  * <p/>
- * Note that the majority of the work is done in {@link amqp.AmqpConsumer}.
+ * Note that the majority of the work is done in {@link AmqpConsumer}.
  */
 public class AmqpEventSource extends EventSource.Base {
   /**
    * Time to wait in between polls for event
+   *
    * @see #next()
    */
   private static final int WAIT_IN_MILLS = 100;
 
   private final AmqpConsumer consumer;
 
-  protected final Thread consumerThread;
-
   public AmqpEventSource(String host, int port, String virtualHost, String userName, String password,
                          String exchangeName, String exchangeType, boolean durableExchange,
-                         String queueName, boolean durable, boolean exclusive, boolean autoDelete, String...bindings) {
+                         String queueName, boolean durable, boolean exclusive, boolean autoDelete, String... bindings) {
     consumer = new AmqpConsumer(host, port, virtualHost, userName, password,
         exchangeName, exchangeType, durableExchange, queueName, durable, exclusive, autoDelete, bindings);
-
-    consumerThread = new Thread(consumer);
   }
 
-  public AmqpEventSource(ConnectionFactory connectionFactory, String exchangeName, String queueName, String...bindings) {
+  public AmqpEventSource(ConnectionFactory connectionFactory, String exchangeName, String queueName, String... bindings) {
     consumer = new AmqpConsumer(connectionFactory, exchangeName, queueName, bindings);
-    consumerThread = new Thread(consumer);
   }
 
   @Override
   public void close() throws IOException {
-    consumer.setRunning(false);
-    consumerThread.interrupt();
+    if (!consumer.isRunning()) {
+      throw new IllegalArgumentException("Cannot call close because AmqpEventSource is not open");
+    }
+    consumer.stopConsumer();
   }
 
   @Override
   public void open() throws IOException {
-    if (!consumerThread.isAlive()) {
-      consumerThread.start();
+    if (consumer.isRunning()) {
+      throw new IllegalArgumentException("AmqpEventSource is already open");
     }
+    consumer.startConsumer();
   }
 
   /**
@@ -84,11 +83,12 @@ public class AmqpEventSource extends EventSource.Base {
   public Event next() throws IOException {
     Event event = null;
 
-    while (consumer.isRunning() && event == null) {
+    // as long as the consumer is running, or has pending events, we need to drain them
+    while ((consumer.isRunning() || consumer.hasPendingEvents()) && event == null) {
       try {
         event = consumer.getNextEvent(WAIT_IN_MILLS, TimeUnit.MILLISECONDS);
 
-        if(event != null) {
+        if (event != null) {
           updateEventProcessingStats(event);
         }
       } catch (InterruptedException e) {
@@ -122,19 +122,19 @@ public class AmqpEventSource extends EventSource.Base {
 
         CommandLineParser parser = new CommandLineParser(args);
 
-        String host             = parser.getOptionValue("host", ConnectionFactory.DEFAULT_HOST);
-        int port                = parser.getOptionValue("port", ConnectionFactory.DEFAULT_AMQP_PORT);
-        String virtualHost      = parser.getOptionValue("virtualHost", ConnectionFactory.DEFAULT_VHOST);
-        String userName         = parser.getOptionValue("userName", ConnectionFactory.DEFAULT_USER);
-        String password         = parser.getOptionValue("password", ConnectionFactory.DEFAULT_PASS);
-        String exchangeName     = parser.getOptionValue("exchangeName");
-        String exchangeType     = parser.getOptionValue("exchangeType", AmqpConsumer.DEFAULT_EXCHANGE_TYPE);
+        String host = parser.getOptionValue("host", ConnectionFactory.DEFAULT_HOST);
+        int port = parser.getOptionValue("port", ConnectionFactory.DEFAULT_AMQP_PORT);
+        String virtualHost = parser.getOptionValue("virtualHost", ConnectionFactory.DEFAULT_VHOST);
+        String userName = parser.getOptionValue("userName", ConnectionFactory.DEFAULT_USER);
+        String password = parser.getOptionValue("password", ConnectionFactory.DEFAULT_PASS);
+        String exchangeName = parser.getOptionValue("exchangeName");
+        String exchangeType = parser.getOptionValue("exchangeType", AmqpConsumer.DEFAULT_EXCHANGE_TYPE);
         boolean durableExchange = parser.getOptionValue("durableExchange", true);
-        String queueName        = parser.getOptionValue("queueName");
-        boolean durableQueue    = parser.getOptionValue("durableQueue", false);
-        boolean exclusiveQueue  = parser.getOptionValue("exclusiveQueue", false);
+        String queueName = parser.getOptionValue("queueName");
+        boolean durableQueue = parser.getOptionValue("durableQueue", false);
+        boolean exclusiveQueue = parser.getOptionValue("exclusiveQueue", false);
         boolean autoDeleteQueue = parser.getOptionValue("autoDeleteQueue", false);
-        String[] bindings       = parser.getOptionValues("bindings");
+        String[] bindings = parser.getOptionValues("bindings");
 
         // exchange name is the only required parameter
         if (exchangeName == null) {
@@ -148,13 +148,13 @@ public class AmqpEventSource extends EventSource.Base {
     };
   }
 
-   /**
+  /**
    * This is a special function used by the SourceFactory to pull in this class
    * as a plugin source.
    */
   public static List<Pair<String, SourceFactory.SourceBuilder>> getSourceBuilders() {
     List<Pair<String, SourceFactory.SourceBuilder>> builders =
-      new ArrayList<Pair<String, SourceFactory.SourceBuilder>>();
+        new ArrayList<Pair<String, SourceFactory.SourceBuilder>>();
     builders.add(new Pair<String, SourceFactory.SourceBuilder>("amqp", builder()));
     return builders;
   }
