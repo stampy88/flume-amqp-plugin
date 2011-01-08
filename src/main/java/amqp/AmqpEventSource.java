@@ -17,6 +17,7 @@
  */
 package amqp;
 
+import com.cloudera.flume.conf.Context;
 import com.cloudera.flume.conf.SourceFactory;
 import com.cloudera.flume.core.Event;
 import com.cloudera.flume.core.EventSource;
@@ -102,7 +103,12 @@ public class AmqpEventSource extends EventSource.Base {
   public static SourceFactory.SourceBuilder builder() {
     return new SourceFactory.SourceBuilder() {
       @Override
-      public EventSource build(String... args) {
+      public EventSource build(String...args) {
+        return build(null, args);        
+      }
+
+      @Override
+      public EventSource build(Context ctx, String... args) {
         if (args.length < 1 || args.length > 13) {
           throw new IllegalArgumentException(
               "amqp(exchangeName=\"exchangeName\" " +
