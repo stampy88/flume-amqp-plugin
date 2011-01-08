@@ -29,6 +29,7 @@
         <pathelement location="${flume.base}/build/classes"/>
         <fileset dir="${flume.base}/lib">
             <include name="**/slf4j-*.jar" />
+            <include name="**/google-collect-*.jar"/>
         </fileset>
         <fileset dir="./lib">            
             <include name="amqp-client-2.1.0.jar"/>
