@@ -24,6 +24,8 @@ import com.cloudera.flume.core.EventSource;
 import com.cloudera.flume.util.CommandLineParser;
 import com.cloudera.util.Pair;
 import com.rabbitmq.client.ConnectionFactory;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -37,6 +39,9 @@ import java.util.concurrent.TimeUnit;
  * Note that the majority of the work is done in {@link AmqpConsumer}.
  */
 public class AmqpEventSource extends EventSource.Base {
+
+  private static final Logger LOG = LoggerFactory.getLogger(AmqpEventSource.class);
+
   /**
    * Time to wait in between polls for event
    *
@@ -60,17 +65,19 @@ public class AmqpEventSource extends EventSource.Base {
   @Override
   public void close() throws IOException {
     if (!consumer.isRunning()) {
-      throw new IllegalArgumentException("Cannot call close because AmqpEventSource is not open");
+      LOG.warn("AmqpEventSource is already closed. Ignoring second close.");
+    } else {
+      consumer.stopConsumer();
     }
-    consumer.stopConsumer();
   }
 
   @Override
   public void open() throws IOException {
     if (consumer.isRunning()) {
-      throw new IllegalArgumentException("AmqpEventSource is already open");
+      LOG.warn("AmqpEventSource is already open. Ignoring second open.");
+    } else {
+      consumer.startConsumer();
     }
-    consumer.startConsumer();
   }
 
   /**
