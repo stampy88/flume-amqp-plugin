@@ -17,6 +17,7 @@
  */
 package amqp;
 
+import com.cloudera.flume.conf.FlumeConfiguration;
 import com.cloudera.flume.core.Event;
 import com.cloudera.flume.core.EventImpl;
 import com.rabbitmq.client.Channel;
@@ -45,6 +46,8 @@ import java.util.concurrent.TimeUnit;
 class AmqpConsumer extends AmqpClient implements Runnable {
 
   private static final Logger LOG = LoggerFactory.getLogger(AmqpConsumer.class);
+
+  private static final long MAX_BODY_SIZE = FlumeConfiguration.get().getEventMaxSizeBytes();
 
   private static final String DIRECT_EXCHANGE = "direct";
   static final String DEFAULT_EXCHANGE_TYPE = DIRECT_EXCHANGE;
@@ -254,11 +257,21 @@ class AmqpConsumer extends AmqpClient implements Runnable {
         // this blocks until a message is ready
         QueueingConsumer.Delivery delivery = consumer.nextDelivery();
 
-        // create a new flume event based on the message body
-        Event event = new EventImpl(delivery.getBody());
+        byte[] body = delivery.getBody();
+        if (body != null) {
+          if(body.length > MAX_BODY_SIZE) {
+            LOG.warn("Received message with body size of {} which is above the {} of {}, ignoring message",
+               new Object[]{body.length, FlumeConfiguration.EVENT_MAX_SIZE, MAX_BODY_SIZE});
+          } else {
+            // create a new flume event based on the message body
+            Event event = new EventImpl(delivery.getBody());
 
-        // add to queue
-        events.add(event);
+            // add to queue
+            events.add(event);
+          }
+        } else {
+          LOG.warn("Received message with null body, ignoring message");
+        }
 
         channel.basicAck(delivery.getEnvelope().getDeliveryTag(), false);
       } catch (InterruptedException e) {
