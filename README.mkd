@@ -48,7 +48,8 @@ because the plugin uses named parameters for setting up the source.
          "[,durableQueue=false] "
          "[,exclusiveQueue=false] "
          "[,autoDeleteQueue=false] "
-         "[,bindings=binding1,binding2,bindingN])"
+         "[,bindings=binding1,binding2,bindingN]
+         "[,useMessageTimestamp=false])"
 
 * exchangeName - this is the name of the AMQP exchange we are getting messages from.
 * host - the host name or IP address of the broker. Default to localhost when not specified.
@@ -67,6 +68,7 @@ messages if the server restarts.
 * autoDeleteQueue - true if we are declaring an autodelete queue (server will delete it when no longer in use).
 * bindings - comma separated list of strings that will be used to bind the queue to the exchange. This is not required for
 certain exchange types.
+* useMessageTimestamp - if true, the timestamp for the Flume event will be based on the timestamp from the AMQP message.
 
 Examples
 --------

@@ -53,9 +53,10 @@ public class AmqpEventSource extends EventSource.Base {
 
   public AmqpEventSource(String host, int port, String virtualHost, String userName, String password,
                          String exchangeName, String exchangeType, boolean durableExchange,
-                         String queueName, boolean durable, boolean exclusive, boolean autoDelete, String... bindings) {
+                         String queueName, boolean durable, boolean exclusive, boolean autoDelete,
+                         boolean useMessageTimestamp, String... bindings) {
     consumer = new AmqpConsumer(host, port, virtualHost, userName, password,
-        exchangeName, exchangeType, durableExchange, queueName, durable, exclusive, autoDelete, bindings);
+        exchangeName, exchangeType, durableExchange, queueName, durable, exclusive, autoDelete, useMessageTimestamp, bindings);
   }
 
   public AmqpEventSource(ConnectionFactory connectionFactory, String exchangeName, String queueName, String... bindings) {
@@ -130,7 +131,8 @@ public class AmqpEventSource extends EventSource.Base {
                   "[,durableQueue=false] " +
                   "[,exclusiveQueue=false] " +
                   "[,autoDeleteQueue=false] " +
-                  "[,bindings=\"binding1,binding2,bindingN\"])");
+                  "[,bindings=\"binding1,binding2,bindingN\"] " +
+                  "[,useMessageTimestamp=false])");
         }
 
         CommandLineParser parser = new CommandLineParser(args);
@@ -148,6 +150,7 @@ public class AmqpEventSource extends EventSource.Base {
         boolean exclusiveQueue = parser.getOptionValue("exclusiveQueue", false);
         boolean autoDeleteQueue = parser.getOptionValue("autoDeleteQueue", false);
         String[] bindings = parser.getOptionValues("bindings");
+        boolean useMessageTimestamp = parser.getOptionValue("useMessageTimestamp", false);
 
         // exchange name is the only required parameter
         if (exchangeName == null) {
@@ -156,7 +159,7 @@ public class AmqpEventSource extends EventSource.Base {
 
         return new AmqpEventSource(host, port, virtualHost, userName, password,
             exchangeName, exchangeType, durableExchange, queueName, durableQueue,
-            exclusiveQueue, autoDeleteQueue, bindings);
+            exclusiveQueue, autoDeleteQueue, useMessageTimestamp, bindings);
       }
     };
   }

@@ -20,6 +20,9 @@ package amqp;
 import com.cloudera.flume.conf.FlumeConfiguration;
 import com.cloudera.flume.core.Event;
 import com.cloudera.flume.core.EventImpl;
+import com.cloudera.util.Clock;
+import com.cloudera.util.NetUtils;
+import com.rabbitmq.client.AMQP;
 import com.rabbitmq.client.Channel;
 import com.rabbitmq.client.ConnectionFactory;
 import com.rabbitmq.client.QueueingConsumer;
@@ -87,6 +90,11 @@ class AmqpConsumer extends AmqpClient implements Runnable {
    */
   private boolean autoDelete;
   private final String[] bindings;
+  /**
+   * true if we use the timestamp from {@link com.rabbitmq.client.AMQP.BasicProperties#getTimestamp()} for the
+   * flume event's timestamp
+   */
+  private boolean useMessageTimestamp;
 
   private Channel channel;
 
@@ -107,7 +115,8 @@ class AmqpConsumer extends AmqpClient implements Runnable {
 
   public AmqpConsumer(String host, int port, String virutalHost, String userName, String password,
                       String exchangeName, String exchangeType, boolean durableExchange,
-                      String queueName, boolean durable, boolean exclusive, boolean autoDelete, String... bindings) {
+                      String queueName, boolean durable, boolean exclusive, boolean autoDelete,
+                      boolean useMessageTimestamp, String... bindings) {
     super(host, port, virutalHost, userName, password);
 
     this.exchangeName = exchangeName;
@@ -117,6 +126,7 @@ class AmqpConsumer extends AmqpClient implements Runnable {
     this.durable = durable;
     this.exclusive = exclusive;
     this.autoDelete = autoDelete;
+    this.useMessageTimestamp = useMessageTimestamp;
     this.bindings = bindings;
   }
 
@@ -263,8 +273,7 @@ class AmqpConsumer extends AmqpClient implements Runnable {
             LOG.warn("Received message with body size of {} which is above the {} of {}, ignoring message",
                new Object[]{body.length, FlumeConfiguration.EVENT_MAX_SIZE, MAX_BODY_SIZE});
           } else {
-            // create a new flume event based on the message body
-            Event event = new EventImpl(delivery.getBody());
+            Event event = createEventFromDelivery(delivery);
 
             // add to queue
             events.add(event);
@@ -295,6 +304,33 @@ class AmqpConsumer extends AmqpClient implements Runnable {
     }
 
     LOG.info("Exited runConsumeLoop with running={} and interrupt status={}", isRunning(), currentThread.isInterrupted());
+  }
+
+  /**
+   * Creates a new flume {@link Event} from the message delivery. Note that if the {@link #useMessageTimestamp} is true
+   * and there is a timestamp on the message, the newly created flume event will have the message's timestamp.
+   * @param delivery message that is being processed
+   * @return new flume event
+   */
+  private Event createEventFromDelivery(QueueingConsumer.Delivery delivery) {
+    long timeInMS = -1, timeInNanos = -1;
+
+    if(useMessageTimestamp) {
+      AMQP.BasicProperties msgProperties = delivery.getProperties();
+
+      if(msgProperties != null && msgProperties.getTimestamp() != null) {
+        timeInMS = msgProperties.getTimestamp().getTime();
+        // there is no time in nanoseconds from the message, so we use the same timestamp for nanos
+        timeInNanos = timeInMS;
+      }
+    }
+
+    if(timeInMS == -1) {
+      timeInMS = Clock.unixTime();
+      timeInNanos = Clock.nanos();
+    }
+
+    return new EventImpl(delivery.getBody(), timeInMS, Event.Priority.INFO, timeInNanos, NetUtils.localhost());
   }
 
   /**
