@@ -1,18 +1,17 @@
-flume-amqp-plugin
-====================
+flume-plugin-amqp
+=================
 
 The flume-amqp-plugin allows you to use an AMQP broker as a Flume Source.
 
-Getting Started
----------------
 
-1. Copy the entire folder to ${flume_dir}/plugins
+Installation
+------------
 
-2. cd ${flume_dir}/plugins/flume-amqp-plugin
+1. Run mvn package
 
-3. Build by running 'ant'. A flume-amqp-plugin.jar file should be created.
+2. Copy the resulting flume-plugin-amqp-${VERSION}-jar-with-dependencies.jar to your Flume lib directory (Default: /usr/lib/flume/lib)
 
-4. Modify ${flume_dir}/conf/flume-site.xml
+3. Modify the Flume site config (Default: /etc/flume/conf/flume-site.xml)
 
 <syntaxhighlight lang="xml">
     <property>
@@ -22,11 +21,6 @@ Getting Started
     </property>
 </syntaxhighlight>
 
-5. cd into the top-level flume directory (above plugins).
-
-Set FLUME_CLASSPATH for all terminals which will run Flume master or node:
-
-export FLUME_CLASSPATH=pwd/plugins/flume-amqp-plugin/flume-amqp-plugin.jar:pwd/plugins/flume-amqp-plugin/lib/amqp-client-2.1.0.jar
 
 Usage
 -----
@@ -69,6 +63,7 @@ messages if the server restarts.
 * bindings - comma separated list of strings that will be used to bind the queue to the exchange. This is not required for
 certain exchange types.
 * useMessageTimestamp - if true, the timestamp for the Flume event will be based on the timestamp from the AMQP message.
+
 
 Examples
 --------
