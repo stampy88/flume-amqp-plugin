@@ -13,13 +13,12 @@ Installation
 
 3. Modify the Flume site config (Default: /etc/flume/conf/flume-site.xml)
 
-<syntaxhighlight lang="xml">
-    <property>
-        <name>flume.plugin.classes</name>
-        <value>amqp.AmqpEventSource</value>
-        <description>Comma separated list of plugin classes</description>
-    </property>
-</syntaxhighlight>
+```xml
+<property>
+  <name>flume.plugin.classes</name>
+  <value>amqp.AmqpEventSource</value>
+</property>
+```
 
 
 Usage
