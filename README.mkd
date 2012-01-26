@@ -42,7 +42,12 @@ because the plugin uses named parameters for setting up the source.
          "[,exclusiveQueue=false] "
          "[,autoDeleteQueue=false] "
          "[,bindings=binding1,binding2,bindingN]
-         "[,useMessageTimestamp=false])"
+         "[,useMessageTimestamp=false]
+         "[,keystoreFile=/path/to/file.jks]
+         "[,keystorePassword=password]
+         "[,truststoreFile=/path/to/file.jks]
+         "[,truststorePassword=password]
+         "[,ciphers=TLS_RSA_WITH_AES_256_CBC_SHA,TLS_DHE_RSA_WITH_AES_256_CBC_SHA,TLS_RSA_WITH_AES_128_CBC_SHA,TLS_DHE_RSA_WITH_AES_128_CBC_SHA])"
 
 * exchangeName - this is the name of the AMQP exchange we are getting messages from.
 * host - the host name or IP address of the broker. Default to localhost when not specified.
@@ -62,6 +67,11 @@ messages if the server restarts.
 * bindings - comma separated list of strings that will be used to bind the queue to the exchange. This is not required for
 certain exchange types.
 * useMessageTimestamp - if true, the timestamp for the Flume event will be based on the timestamp from the AMQP message.
+* keystoreFile - HDFS path to a JKS formatted keystore
+* keystorePassword - Password to load the keystore
+* truststoreFile = HDFS path to a JKS formatted keystore
+* truststorePassword - Password to load the keystore
+* ciphers - Comma separated list of ciphers to use for this connection
 
 
 Examples
