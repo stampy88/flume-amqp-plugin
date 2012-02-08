@@ -100,6 +100,7 @@ public class AmqpEventSource extends EventSource.Base {
         }
       } catch (InterruptedException e) {
         // someone interrupted us - return null event
+    	return null;
       }
     }
 
