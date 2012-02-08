@@ -256,8 +256,11 @@ class AmqpConsumer extends AmqpClient implements Runnable {
           LOG.info("Starting new consumer. Server generated {} as consumerTag", consumerTag);
         }
 
-        // this blocks until a message is ready
-        QueueingConsumer.Delivery delivery = consumer.nextDelivery();
+        // Wait for 5 seconds, otherwise start another run.
+        // This is to prevent deadlocks when no message arrives.
+        QueueingConsumer.Delivery delivery = consumer.nextDelivery(5000);
+        if (delivery == null)
+        	continue;
 
         byte[] body = delivery.getBody();
         if (body != null) {
