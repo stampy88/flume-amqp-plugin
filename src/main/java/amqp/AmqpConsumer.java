@@ -98,7 +98,7 @@ class AmqpConsumer extends AmqpClient implements Runnable {
 
   private Channel channel;
 
-  private final BlockingQueue<Event> events = new LinkedBlockingQueue<Event>();
+  private final BlockingQueue<Event> events = new LinkedBlockingQueue<Event>(1);
 
   private Thread consumerThread;
 
@@ -271,7 +271,7 @@ class AmqpConsumer extends AmqpClient implements Runnable {
             Event event = createEventFromDelivery(delivery);
 
             // add to queue
-            events.add(event);
+            events.put(event);
           }
         } else {
           LOG.warn("Received message with null body, ignoring message");
