@@ -53,14 +53,12 @@ public class AmqpEventSource extends EventSource.Base {
 
   public AmqpEventSource(String host, int port, String virtualHost, String userName, String password,
                          String exchangeName, String exchangeType, boolean durableExchange,
-                         String queueName, boolean durable, boolean exclusive, boolean autoDelete,
-                         boolean useMessageTimestamp, String... bindings) {
+                         String queueName, boolean durable, boolean exclusive, boolean autoDelete, String[] bindings,
+                         boolean useMessageTimestamp, String keystoreFile, String keystorePassword, String truststoreFile,
+                         String truststorePassword, String[] ciphers) {
     consumer = new AmqpConsumer(host, port, virtualHost, userName, password,
-        exchangeName, exchangeType, durableExchange, queueName, durable, exclusive, autoDelete, useMessageTimestamp, bindings);
-  }
-
-  public AmqpEventSource(ConnectionFactory connectionFactory, String exchangeName, String queueName, String... bindings) {
-    consumer = new AmqpConsumer(connectionFactory, exchangeName, queueName, bindings);
+        exchangeName, exchangeType, durableExchange, queueName, durable, exclusive, autoDelete,
+        bindings, useMessageTimestamp, keystoreFile, keystorePassword, truststoreFile, truststorePassword, ciphers);
   }
 
   @Override
@@ -102,6 +100,7 @@ public class AmqpEventSource extends EventSource.Base {
         }
       } catch (InterruptedException e) {
         // someone interrupted us - return null event
+    	return null;
       }
     }
 
@@ -117,7 +116,7 @@ public class AmqpEventSource extends EventSource.Base {
 
       @Override
       public EventSource build(Context ctx, String... args) {
-        if (args.length < 1 || args.length > 13) {
+        if (args.length < 1 || args.length > 18) {
           throw new IllegalArgumentException(
               "amqp(exchangeName=\"exchangeName\" " +
                   "[,host=\"host\"] " +
@@ -132,7 +131,12 @@ public class AmqpEventSource extends EventSource.Base {
                   "[,exclusiveQueue=false] " +
                   "[,autoDeleteQueue=false] " +
                   "[,bindings=\"binding1,binding2,bindingN\"] " +
-                  "[,useMessageTimestamp=false])");
+                  "[,useMessageTimestamp=false] " +
+                  "[,keystoreFile=/path/to/file.jks] " +
+                  "[,keystorePassword=password] " +
+                  "[,truststoreFile=/path/to/file.jks] " +
+                  "[,truststorePassword=password] " +
+                  "[,ciphers=TLS_RSA_WITH_AES_256_CBC_SHA,TLS_DHE_RSA_WITH_AES_256_CBC_SHA,TLS_RSA_WITH_AES_128_CBC_SHA,TLS_DHE_RSA_WITH_AES_128_CBC_SHA])");
         }
 
         CommandLineParser parser = new CommandLineParser(args);
@@ -151,6 +155,13 @@ public class AmqpEventSource extends EventSource.Base {
         boolean autoDeleteQueue = parser.getOptionValue("autoDeleteQueue", false);
         String[] bindings = parser.getOptionValues("bindings");
         boolean useMessageTimestamp = parser.getOptionValue("useMessageTimestamp", false);
+        String keystoreFile = parser.getOptionValue("keystoreFile");
+        String keystorePassword = parser.getOptionValue("keystorePassword");
+        String truststoreFile = parser.getOptionValue("truststoreFile");
+        String truststorePassword = parser.getOptionValue("truststorePassword");
+        String[] ciphers = parser.getOptionValues("ciphers");
+        if (ciphers == null)
+        	ciphers = AmqpConsumer.DEFAULT_CIPHERS;
 
         // exchange name is the only required parameter
         if (exchangeName == null) {
@@ -159,7 +170,7 @@ public class AmqpEventSource extends EventSource.Base {
 
         return new AmqpEventSource(host, port, virtualHost, userName, password,
             exchangeName, exchangeType, durableExchange, queueName, durableQueue,
-            exclusiveQueue, autoDeleteQueue, useMessageTimestamp, bindings);
+            exclusiveQueue, autoDeleteQueue, bindings, useMessageTimestamp, keystoreFile, keystorePassword, truststoreFile, truststorePassword, ciphers);
       }
     };
   }

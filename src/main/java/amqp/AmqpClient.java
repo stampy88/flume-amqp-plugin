@@ -22,10 +22,28 @@ import com.rabbitmq.client.Channel;
 import com.rabbitmq.client.Connection;
 import com.rabbitmq.client.ConnectionFactory;
 import com.rabbitmq.client.ShutdownSignalException;
+
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.fs.Path;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.io.InputStream;
+import java.net.InetAddress;
+import java.net.Socket;
+import java.net.URI;
+import java.net.UnknownHostException;
+import java.security.GeneralSecurityException;
+import java.security.KeyStore;
+import java.util.ArrayList;
+
+import javax.net.SocketFactory;
+import javax.net.ssl.KeyManagerFactory;
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.SSLSocket;
+import javax.net.ssl.TrustManagerFactory;
 
 /**
  * This class provides access to an AMQP broker via a {@link com.rabbitmq.client.Channel}. Besides the
@@ -90,6 +108,96 @@ abstract class AmqpClient {
     connectionFactory.setVirtualHost(virtualHost);
     connectionFactory.setUsername(username);
     connectionFactory.setPassword(password);
+  }
+
+	protected AmqpClient(String host, int port, String virtualHost, String username, String password, String keystoreFile, String keystorePassword, String truststoreFile, String truststorePassword, String[] ciphers) {
+		this(host, port, virtualHost, username, password);
+
+		try {
+			Configuration conf = new Configuration();
+
+			KeyStore keystore = loadKeyStore(conf, keystoreFile, keystorePassword);
+			KeyStore truststore = loadKeyStore(conf, truststoreFile, truststorePassword);
+
+			KeyManagerFactory kmf = KeyManagerFactory.getInstance("SunX509");
+			kmf.init(keystore, keystorePassword.toCharArray());
+			TrustManagerFactory tmf = TrustManagerFactory.getInstance("SunX509");
+			tmf.init(truststore);
+
+			SSLContext c = SSLContext.getInstance("SSLv3");
+			c.init(kmf.getKeyManagers(), tmf.getTrustManagers(), null);
+
+			connectionFactory.useSslProtocol(c);
+			connectionFactory.setSocketFactory(new ConfigurableCipherSocketFactory(ciphers, connectionFactory.getSocketFactory()));
+		} catch (Exception e) {
+			throw new RuntimeException(e);
+		}
+	}
+
+	protected KeyStore loadKeyStore(Configuration conf, String path, String password) throws GeneralSecurityException, IOException {
+		URI pathUri = URI.create(path);
+		FileSystem fs = FileSystem.get(pathUri, conf);
+		InputStream is = fs.open(new Path(pathUri));
+		try {
+			KeyStore keystore = KeyStore.getInstance("JKS");
+			keystore.load(is, password.toCharArray());
+			return keystore;
+		} finally {
+			is.close();
+			fs.close();
+		}
+	}
+
+  private class ConfigurableCipherSocketFactory extends SocketFactory {
+	private String[] ciphers;
+	private SocketFactory base;
+
+	public ConfigurableCipherSocketFactory(String[] ciphers, SocketFactory base) {
+		this.ciphers = ciphers;
+		this.base = base;
+	}
+
+	protected Socket configurCiphers(Socket socket) {
+		if (!(socket instanceof SSLSocket))
+			return socket;
+
+		SSLSocket sslSocket = (SSLSocket)socket;
+		ArrayList<String> includeCiphers = new ArrayList<String>(ciphers.length);
+		for (String enabledCipher : sslSocket.getEnabledCipherSuites()) {
+			for (String cipher : ciphers) {
+				if (cipher.equals(enabledCipher))
+					includeCiphers.add(cipher);
+			}
+		}
+		LOG.debug("Enabled ciphers: {}", includeCiphers.toString());
+		sslSocket.setEnabledCipherSuites(includeCiphers.toArray(new String[0]));
+		return sslSocket;
+	}
+
+	@Override
+	public Socket createSocket() throws IOException {
+		return configurCiphers(base.createSocket());
+	}
+
+	@Override
+	public Socket createSocket(InetAddress address, int port, InetAddress localAddress, int localPort) throws IOException {
+		return configurCiphers(base.createSocket(address, port, localAddress, localPort));
+	}
+
+	@Override
+	public Socket createSocket(InetAddress host, int port) throws IOException {
+		return configurCiphers(base.createSocket(host, port));
+	}
+
+	@Override
+	public Socket createSocket(String host, int port, InetAddress localHost, int localPort) throws IOException, UnknownHostException {
+		return configurCiphers(base.createSocket(host, port, localHost, localPort));
+	}
+
+	@Override
+	public Socket createSocket(String host, int port) throws IOException, UnknownHostException {
+		return configurCiphers(base.createSocket(host, port));
+	}
   }
 
   protected AmqpClient(ConnectionFactory connectionFactory) {

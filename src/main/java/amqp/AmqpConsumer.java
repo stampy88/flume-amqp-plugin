@@ -24,7 +24,6 @@ import com.cloudera.util.Clock;
 import com.cloudera.util.NetUtils;
 import com.rabbitmq.client.AMQP;
 import com.rabbitmq.client.Channel;
-import com.rabbitmq.client.ConnectionFactory;
 import com.rabbitmq.client.QueueingConsumer;
 import com.rabbitmq.client.ShutdownSignalException;
 import org.slf4j.Logger;
@@ -54,6 +53,7 @@ class AmqpConsumer extends AmqpClient implements Runnable {
 
   private static final String DIRECT_EXCHANGE = "direct";
   static final String DEFAULT_EXCHANGE_TYPE = DIRECT_EXCHANGE;
+  static final String[] DEFAULT_CIPHERS = new String[] { "TLS_RSA_WITH_AES_256_CBC_SHA", "TLS_DHE_RSA_WITH_AES_256_CBC_SHA", "TLS_RSA_WITH_AES_128_CBC_SHA", "TLS_DHE_RSA_WITH_AES_128_CBC_SHA" };
 
   /**
    * Exchange level properties
@@ -98,7 +98,7 @@ class AmqpConsumer extends AmqpClient implements Runnable {
 
   private Channel channel;
 
-  private final BlockingQueue<Event> events = new LinkedBlockingQueue<Event>();
+  private final BlockingQueue<Event> events = new LinkedBlockingQueue<Event>(1);
 
   private Thread consumerThread;
 
@@ -115,9 +115,9 @@ class AmqpConsumer extends AmqpClient implements Runnable {
 
   public AmqpConsumer(String host, int port, String virutalHost, String userName, String password,
                       String exchangeName, String exchangeType, boolean durableExchange,
-                      String queueName, boolean durable, boolean exclusive, boolean autoDelete,
-                      boolean useMessageTimestamp, String... bindings) {
-    super(host, port, virutalHost, userName, password);
+                      String queueName, boolean durable, boolean exclusive, boolean autoDelete, String[] bindings,
+                      boolean useMessageTimestamp, String keystoreFile, String keystorePassword, String truststoreFile, String truststorePassword, String[] ciphers) {
+    super(host, port, virutalHost, userName, password, keystoreFile, keystorePassword, truststoreFile, truststorePassword, ciphers);
 
     this.exchangeName = exchangeName;
     this.exchangeType = exchangeType;
@@ -126,16 +126,8 @@ class AmqpConsumer extends AmqpClient implements Runnable {
     this.durable = durable;
     this.exclusive = exclusive;
     this.autoDelete = autoDelete;
+    this.bindings = bindings;
     this.useMessageTimestamp = useMessageTimestamp;
-    this.bindings = bindings;
-  }
-
-  public AmqpConsumer(ConnectionFactory connectionFactory, String exchangeName, String queueName, String... bindings) {
-    super(connectionFactory);
-
-    this.exchangeName = exchangeName;
-    this.queueName = queueName;
-    this.bindings = bindings;
   }
 
   /**
@@ -264,8 +256,11 @@ class AmqpConsumer extends AmqpClient implements Runnable {
           LOG.info("Starting new consumer. Server generated {} as consumerTag", consumerTag);
         }
 
-        // this blocks until a message is ready
-        QueueingConsumer.Delivery delivery = consumer.nextDelivery();
+        // Wait for 5 seconds, otherwise start another run.
+        // This is to prevent deadlocks when no message arrives.
+        QueueingConsumer.Delivery delivery = consumer.nextDelivery(5000);
+        if (delivery == null)
+        	continue;
 
         byte[] body = delivery.getBody();
         if (body != null) {
@@ -276,7 +271,7 @@ class AmqpConsumer extends AmqpClient implements Runnable {
             Event event = createEventFromDelivery(delivery);
 
             // add to queue
-            events.add(event);
+            events.put(event);
           }
         } else {
           LOG.warn("Received message with null body, ignoring message");
